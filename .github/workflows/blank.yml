@@ -14,7 +14,7 @@ on:
 jobs:
 
   # ============================================================
-  # 1. CHECKOUT SOURCE CODE
+  # 1. CHECKOUT
   # ============================================================
   checkout:
     name: 01 - Checkout Repository
@@ -29,10 +29,25 @@ jobs:
 
 
   # ============================================================
-  # 2. UNIT TEST
+  # PARALLEL STAGE
+  #
+  # The following jobs all depend ONLY on checkout.
+  # Therefore GitHub Actions can run them at the same time.
+  #
+  #             ┌── Unit Test
+  #             ├── Code Quality
+  # Checkout ───┼── Secret Scan
+  #             ├── SAST
+  #             └── Config Scan
+  #
+  # ============================================================
+
+
+  # ============================================================
+  # 2A. UNIT TEST
   # ============================================================
   unit-test:
-    name: 02 - Unit Test
+    name: 02A - Unit Test
     runs-on: ubuntu-latest
     needs: checkout
 
@@ -45,13 +60,13 @@ jobs:
 
 
   # ============================================================
-  # 3. CODE QUALITY ANALYSIS
-  # Example real tool: SonarQube / SonarCloud
+  # 2B. CODE QUALITY
+  # Example: SonarQube / SonarCloud
   # ============================================================
   code-quality:
-    name: 03 - Code Quality Analysis
+    name: 02B - Code Quality Analysis
     runs-on: ubuntu-latest
-    needs: unit-test
+    needs: checkout
 
     steps:
       - name: Analyze code quality
@@ -62,13 +77,13 @@ jobs:
 
 
   # ============================================================
-  # 4. SECRET SCANNING
-  # Example real tool: Gitleaks
+  # 2C. SECRET SCANNING
+  # Example: Gitleaks
   # ============================================================
   secret-scan:
-    name: 04 - Secret Scan
+    name: 02C - Secret Scan
     runs-on: ubuntu-latest
-    needs: code-quality
+    needs: checkout
 
     steps:
       - name: Scan repository for secrets
@@ -80,13 +95,12 @@ jobs:
 
 
   # ============================================================
-  # 5. STATIC APPLICATION SECURITY TESTING
-  # SAST
+  # 2D. SAST
   # ============================================================
   sast-scan:
-    name: 05 - SAST Security Scan
+    name: 02D - SAST Security Scan
     runs-on: ubuntu-latest
-    needs: secret-scan
+    needs: checkout
 
     steps:
       - name: Run SAST scan
@@ -97,13 +111,13 @@ jobs:
 
 
   # ============================================================
-  # 6. INFRASTRUCTURE / CONFIGURATION SCAN
-  # Example real tool: Checkov
+  # 2E. CONFIGURATION / IaC SECURITY SCAN
+  # Example: Checkov
   # ============================================================
   config-scan:
-    name: 06 - Configuration Security Scan
+    name: 02E - Configuration Security Scan
     runs-on: ubuntu-latest
-    needs: sast-scan
+    needs: checkout
 
     steps:
       - name: Scan configuration
@@ -114,12 +128,37 @@ jobs:
 
 
   # ============================================================
-  # 7. AUTHENTICATE TO VAULT
+  # 3. SECURITY / QUALITY GATE
+  #
+  # This job waits for ALL parallel jobs above.
+  # ============================================================
+  quality-gate:
+    name: 03 - Quality & Security Gate
+    runs-on: ubuntu-latest
+
+    needs:
+      - unit-test
+      - code-quality
+      - secret-scan
+      - sast-scan
+      - config-scan
+
+    steps:
+      - name: Validate previous checks
+        run: |
+          echo "All required testing and security jobs completed."
+          echo "Evaluating quality and security gates..."
+          sleep 2
+          echo "Quality and security gate passed."
+
+
+  # ============================================================
+  # 4. VAULT AUTHENTICATION
   # ============================================================
   vault-auth:
-    name: 07 - Authenticate to Vault
+    name: 04 - Authenticate to Vault
     runs-on: ubuntu-latest
-    needs: config-scan
+    needs: quality-gate
 
     steps:
       - name: Authenticate to Vault
@@ -130,10 +169,10 @@ jobs:
 
 
   # ============================================================
-  # 8. BUILD CONTAINER IMAGE
+  # 5. BUILD IMAGE
   # ============================================================
   build-image:
-    name: 08 - Build Container Image
+    name: 05 - Build Container Image
     runs-on: ubuntu-latest
     needs: vault-auth
 
@@ -146,11 +185,11 @@ jobs:
 
 
   # ============================================================
-  # 9. CONTAINER IMAGE VULNERABILITY SCAN
-  # Example real tool: Trivy
+  # 6. IMAGE VULNERABILITY SCAN
+  # Example: Trivy
   # ============================================================
   image-scan:
-    name: 09 - Scan Container Image
+    name: 06 - Scan Container Image
     runs-on: ubuntu-latest
     needs: build-image
 
@@ -163,11 +202,11 @@ jobs:
 
 
   # ============================================================
-  # 10. AUTHENTICATE TO AWS
-  # Production: Prefer GitHub OIDC instead of static AWS keys
+  # 7. AWS AUTHENTICATION
+  # Production: GitHub OIDC -> AWS IAM role
   # ============================================================
   aws-auth:
-    name: 10 - Authenticate to AWS
+    name: 07 - Authenticate to AWS
     runs-on: ubuntu-latest
     needs: image-scan
 
@@ -180,10 +219,10 @@ jobs:
 
 
   # ============================================================
-  # 11. AUTHENTICATE DOCKER TO AMAZON ECR
+  # 8. ECR AUTHENTICATION
   # ============================================================
   ecr-auth:
-    name: 11 - Authenticate to Amazon ECR
+    name: 08 - Authenticate to Amazon ECR
     runs-on: ubuntu-latest
     needs: aws-auth
 
@@ -196,10 +235,10 @@ jobs:
 
 
   # ============================================================
-  # 12. PUSH IMAGE TO ECR
+  # 9. PUSH IMAGE
   # ============================================================
   push-image:
-    name: 12 - Push Image to ECR
+    name: 09 - Push Image to ECR
     runs-on: ubuntu-latest
     needs: ecr-auth
 
@@ -213,11 +252,11 @@ jobs:
 
 
   # ============================================================
-  # 13. SIGN CONTAINER IMAGE
-  # Example real tool: Cosign
+  # 10. SIGN IMAGE
+  # Example: Cosign
   # ============================================================
   sign-image:
-    name: 13 - Sign Container Image
+    name: 10 - Sign Container Image
     runs-on: ubuntu-latest
     needs: push-image
 
@@ -230,10 +269,10 @@ jobs:
 
 
   # ============================================================
-  # 14. CLONE GITOPS / DEPLOYMENT REPOSITORY
+  # 11. CLONE DEPLOYMENT / GITOPS REPOSITORY
   # ============================================================
   clone-deployment-repo:
-    name: 14 - Clone Deployment Repository
+    name: 11 - Clone Deployment Repository
     runs-on: ubuntu-latest
     needs: sign-image
 
@@ -246,10 +285,10 @@ jobs:
 
 
   # ============================================================
-  # 15. UPDATE IMAGE TAG
+  # 12. UPDATE IMAGE
   # ============================================================
   update-image:
-    name: 15 - Update Deployment Image
+    name: 12 - Update Deployment Image
     runs-on: ubuntu-latest
     needs: clone-deployment-repo
 
@@ -263,10 +302,10 @@ jobs:
 
 
   # ============================================================
-  # 16. VALIDATE DEPLOYMENT MANIFESTS
+  # 13. VALIDATE DEPLOYMENT MANIFESTS
   # ============================================================
   validate-manifests:
-    name: 16 - Validate Deployment Manifests
+    name: 13 - Validate Deployment Manifests
     runs-on: ubuntu-latest
     needs: update-image
 
@@ -279,10 +318,10 @@ jobs:
 
 
   # ============================================================
-  # 17. PUSH GITOPS CHANGES
+  # 14. PUSH DEPLOYMENT CHANGES
   # ============================================================
   push-deployment:
-    name: 17 - Push Deployment Changes
+    name: 14 - Push Deployment Changes
     runs-on: ubuntu-latest
     needs: validate-manifests
 
@@ -297,10 +336,10 @@ jobs:
 
 
   # ============================================================
-  # 18. SYNC ARGO CD
+  # 15. ARGO CD SYNC
   # ============================================================
   argocd-sync:
-    name: 18 - Sync Argo CD
+    name: 15 - Sync Argo CD
     runs-on: ubuntu-latest
     needs: push-deployment
 
@@ -314,10 +353,10 @@ jobs:
 
 
   # ============================================================
-  # 19. VERIFY DEPLOYMENT
+  # 16. VERIFY DEPLOYMENT
   # ============================================================
   verify-deployment:
-    name: 19 - Verify Deployment
+    name: 16 - Verify Deployment
     runs-on: ubuntu-latest
     needs: argocd-sync
 
@@ -331,10 +370,10 @@ jobs:
 
 
   # ============================================================
-  # 20. SEND NOTIFICATION
+  # 17. NOTIFICATION
   # ============================================================
   notification:
-    name: 20 - Send Notification
+    name: 17 - Send Notification
     runs-on: ubuntu-latest
     needs: verify-deployment
     if: always()
