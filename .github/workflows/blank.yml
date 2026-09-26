@@ -1,36 +1,224 @@
-# This is a basic workflow to help you get started with Actions
+name: CI Pipeline Demo
 
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
 
-  # Allows you to run this workflow manually from the Actions tab
+  pull_request:
+    branches:
+      - main
+
+  # Allows manual execution from GitHub Actions
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+
+  # -------------------------------------------------------
+  # 1. CHECKOUT
+  # -------------------------------------------------------
+  checkout:
+    name: Checkout Repository
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
-
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Checkout source code
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          echo "Checking out application repository..."
+          sleep 2
+          echo "Repository checkout completed."
+
+
+  # -------------------------------------------------------
+  # 2. UNIT TEST
+  # -------------------------------------------------------
+  unit-test:
+    name: Unit Test
+    runs-on: ubuntu-latest
+    needs: checkout
+
+    steps:
+      - name: Run unit tests
+        run: |
+          echo "Running unit tests..."
+          sleep 2
+          echo "Unit tests completed successfully."
+
+
+  # -------------------------------------------------------
+  # 3. SECRET SCAN
+  # -------------------------------------------------------
+  secret-scan:
+    name: Scan Repository for Secrets
+    runs-on: ubuntu-latest
+    needs: unit-test
+
+    steps:
+      - name: Scan repository
+        run: |
+          echo "Scanning repository for exposed secrets..."
+          sleep 2
+          echo "Secret scan completed. No secrets detected."
+
+
+  # -------------------------------------------------------
+  # 4. VAULT AUTHENTICATION
+  # -------------------------------------------------------
+  vault-auth:
+    name: Authenticate to Vault
+    runs-on: ubuntu-latest
+    needs: secret-scan
+
+    steps:
+      - name: Authenticate to Vault
+        run: |
+          echo "Authenticating to HashiCorp Vault..."
+          sleep 2
+          echo "Vault authentication successful."
+
+
+  # -------------------------------------------------------
+  # 5. BUILD IMAGE
+  # -------------------------------------------------------
+  build-image:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: vault-auth
+
+    steps:
+      - name: Build image
+        run: |
+          echo "Building Docker image..."
+          sleep 2
+          echo "Docker image built successfully."
+
+
+  # -------------------------------------------------------
+  # 6. IMAGE SCAN
+  # -------------------------------------------------------
+  image-scan:
+    name: Scan Docker Image
+    runs-on: ubuntu-latest
+    needs: build-image
+
+    steps:
+      - name: Scan image
+        run: |
+          echo "Scanning Docker image for vulnerabilities..."
+          sleep 2
+          echo "Image vulnerability scan completed."
+
+
+  # -------------------------------------------------------
+  # 7. AWS / ECR AUTHENTICATION
+  # -------------------------------------------------------
+  ecr-auth:
+    name: Authenticate to AWS ECR
+    runs-on: ubuntu-latest
+    needs: image-scan
+
+    steps:
+      - name: Authenticate to ECR
+        run: |
+          echo "Authenticating to AWS..."
+          echo "Authenticating Docker to Amazon ECR..."
+          sleep 2
+          echo "AWS ECR authentication successful."
+
+
+  # -------------------------------------------------------
+  # 8. PUSH IMAGE
+  # -------------------------------------------------------
+  push-image:
+    name: Push Image to ECR
+    runs-on: ubuntu-latest
+    needs: ecr-auth
+
+    steps:
+      - name: Push image
+        run: |
+          echo "Pushing Docker image to Amazon ECR..."
+          sleep 2
+          echo "Docker image pushed successfully."
+
+
+  # -------------------------------------------------------
+  # 9. CLONE DEPLOYMENT REPOSITORY
+  # -------------------------------------------------------
+  clone-deployment-repo:
+    name: Clone Deployment Repository
+    runs-on: ubuntu-latest
+    needs: push-image
+
+    steps:
+      - name: Clone deployment repository
+        run: |
+          echo "Cloning deployment repository..."
+          sleep 2
+          echo "Deployment repository cloned successfully."
+
+
+  # -------------------------------------------------------
+  # 10. UPDATE IMAGE
+  # -------------------------------------------------------
+  update-image:
+    name: Update Deployment Image
+    runs-on: ubuntu-latest
+    needs: clone-deployment-repo
+
+    steps:
+      - name: Update image tag
+        run: |
+          echo "Updating deployment manifest with new image..."
+          echo "Substituting the old image tag with the newly built image..."
+          sleep 2
+          echo "Deployment image updated successfully."
+
+
+  # -------------------------------------------------------
+  # 11. PUSH DEPLOYMENT CHANGES
+  # -------------------------------------------------------
+  push-deployment:
+    name: Push Deployment Changes
+    runs-on: ubuntu-latest
+    needs: update-image
+
+    steps:
+      - name: Push changes
+        run: |
+          echo "Committing deployment manifest changes..."
+          echo "Pushing changes back to deployment repository..."
+          sleep 2
+          echo "Deployment changes pushed successfully."
+
+
+  # -------------------------------------------------------
+  # 12. ARGO CD SYNC
+  # -------------------------------------------------------
+  argocd-sync:
+    name: Sync Argo CD
+    runs-on: ubuntu-latest
+    needs: push-deployment
+
+    steps:
+      - name: Sync application
+        run: |
+          echo "Starting Argo CD synchronization..."
+          sleep 2
+          echo "Argo CD synchronization completed successfully."
+
+
+  # -------------------------------------------------------
+  # 13. NOTIFICATION
+  # -------------------------------------------------------
+  notification:
+    name: Send Notification
+    runs-on: ubuntu-latest
+    needs: argocd-sync
+
+    steps:
+      - name: Send pipeline notification
+        run: |
+          echo "Sending deployment notification..."
+          sleep 2
+        echo "Notification sent successfully."
